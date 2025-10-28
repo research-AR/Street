@@ -14,7 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const mindarThree = new MindARThree({
             container: arContainer,
-            imageTargetSrc: "./applications-20230306/applications/assets/targets/targetsdetay2.mind",
+            imageTargetSrc: "./applications-20230306/applications/assets/targets/targetscerceve.mind",
             maxTrack: 2, // Allow tracking of 2 targets
             filterMinCF: 0.0001, // Lower value for better tracking
             filterBeta: 10,      // Higher value for more smoothing (was 1000, which is too high)
