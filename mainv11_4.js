@@ -16,10 +16,10 @@ document.addEventListener('DOMContentLoaded', () => {
             container: arContainer,
             imageTargetSrc: "./applications-20230306/applications/assets/targets/targetsdetay2.mind",
             maxTrack: 2, // Allow tracking of 2 targets
-            filterMinCF: 0.0001, // Smoothing filter - increase for more stability
-            filterBeta: 1000, // Reduce jitter - higher = smoother but less responsive
-            warmupTolerance: 5, // Wait 5 frames before showing (reduces initial jitter)
-            missTolerance: 5 // Keep showing for 5 frames after losing track
+            filterMinCF: 0.0001, // Lower value for better tracking
+            filterBeta: 10,      // Higher value for more smoothing (was 1000, which is too high)
+            warmupTolerance: 10, // More tolerance for warmup
+            missTolerance: 10    // More tolerance for brief tracking losses
         });
         const {renderer, scene, camera} = mindarThree;
 
@@ -42,6 +42,12 @@ document.addEventListener('DOMContentLoaded', () => {
         // Create anchor points for AR tracking
         const anchor = mindarThree.addAnchor(0); // First target (main scenes)
         // Second anchor will be created later when needed (performance optimization)
+
+        // --- SMOOTHING GROUP (to reduce jitter) ---
+        // The smoothed group is at scene level, not as child of anchor
+        // This allows us to interpolate its world transform independently
+        const smoothed = new THREE.Group();
+        scene.add(smoothed); // Add to scene, not to anchor
 
         // --- HUD (screen-fixed arrows) ---
         injectHUDStyles();
@@ -310,6 +316,14 @@ document.addEventListener('DOMContentLoaded', () => {
         // Show HUD only while target is tracked
         anchor.onTargetFound = () => { 
             hud.hidden = false; 
+            
+            // Initialize smoothed group position on first detection to prevent initial snap
+            if (!targetFound) {
+                anchor.group.getWorldPosition(smoothed.position);
+                anchor.group.getWorldQuaternion(smoothed.quaternion);
+                anchor.group.getWorldScale(smoothed.scale);
+            }
+            
             targetFound = true;
             
             console.log(`Target found! Current slot: ${index}, slotControllers[${index}]:`, slotControllers[index]);
@@ -336,6 +350,10 @@ document.addEventListener('DOMContentLoaded', () => {
             secondAnchor = mindarThree.addAnchor(1); // Create second target anchor
             secondAnchorInitialized = true;
             
+            // Create second smoothed group for second target (at scene level)
+            secondSmoothed = new THREE.Group();
+            scene.add(secondSmoothed); // Add to scene for independent interpolation
+            
             // Set up event handlers for second target
             setupSecondTargetHandlers();
             
@@ -348,6 +366,13 @@ document.addEventListener('DOMContentLoaded', () => {
             secondAnchor.onTargetFound = () => {
                 if (allScenesCompleted) {
                     console.log('🎯 Second target (building) found! Showing building scenes...');
+                    
+                    // Initialize second smoothed group position on first detection to prevent initial snap
+                    if (!secondTargetFound && secondSmoothed) {
+                        secondAnchor.group.getWorldPosition(secondSmoothed.position);
+                        secondAnchor.group.getWorldQuaternion(secondSmoothed.quaternion);
+                        secondAnchor.group.getWorldScale(secondSmoothed.scale);
+                    }
                     
                     secondTargetActive = true;
                     secondTargetFound = true;
@@ -463,7 +488,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 ghostScene.position.set(0, 0, 0);
                 ghostScene.rotation.set(0, 0, 0);
                 prepOccluder(ghostScene);        // make it "ghost"
-                anchor.group.add(ghostScene);    // Attach to FIRST target
+                smoothed.add(ghostScene);        // Add to smoothed group for consistent positioning
                 ghostScene.visible = true;
                 console.log("[OCCLUDER] Ghost1 (closest layer) loaded on first target");
             },
@@ -479,7 +504,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 ghostScene.position.set(0, 0, 0);
                 ghostScene.rotation.set(0, 0, 0);
                 prepOccluder(ghostScene);        // make it "ghost"
-                anchor.group.add(ghostScene);    // Attach to FIRST target
+                smoothed.add(ghostScene);        // Add to smoothed group for consistent positioning
                 ghostScene.visible = true;
                 console.log("[OCCLUDER] Ghost2 (middle layer) loaded on first target");
             },
@@ -495,7 +520,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 ghostScene.position.set(0, 0, 0);
                 ghostScene.rotation.set(0, 0, 0);
                 prepOccluder(ghostScene);        // make it "ghost"
-                anchor.group.add(ghostScene);    // Attach to FIRST target
+                smoothed.add(ghostScene);        // Add to smoothed group for consistent positioning
                 ghostScene.visible = true;
                 console.log("[OCCLUDER] Ghost3 (furthest layer) loaded on first target");
             },
@@ -508,15 +533,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
         function register(obj, slot) {
             obj.visible = false;              // avoid a flash before we choose
-            anchor.group.add(obj);            // attach to anchor
+            smoothed.add(obj);                // attach to smoothed group instead of anchor.group
             models[slot] = obj;               // place into fixed slot
             applyVisibility();
         }
         
+        // Second smoothed group (will be created when second anchor is initialized)
+        let secondSmoothed = null;
+        
         // Register function for second target
         function secondRegister(obj, slot) {
             obj.visible = false;
-            secondAnchor.group.add(obj);
+            if (secondSmoothed) {
+                secondSmoothed.add(obj);      // attach to second smoothed group
+            }
             secondModels[slot] = obj;
             secondApplyVisibility();
         }
@@ -1280,8 +1310,46 @@ document.addEventListener('DOMContentLoaded', () => {
         // Animation mixer for updating animations
         const clock = new THREE.Clock();
         
+        // Smoothing parameters for lerp/slerp
+        const smoothingAlpha = 0.2; // Lower = smoother but more lag, higher = snappier but more jitter
+        
+        // Helper matrices and vectors for world transform extraction
+        const anchorWorldPosition = new THREE.Vector3();
+        const anchorWorldQuaternion = new THREE.Quaternion();
+        const anchorWorldScale = new THREE.Vector3();
+        
+        const secondAnchorWorldPosition = new THREE.Vector3();
+        const secondAnchorWorldQuaternion = new THREE.Quaternion();
+        const secondAnchorWorldScale = new THREE.Vector3();
+        
         renderer.setAnimationLoop(() => {
             const delta = Math.min(clock.getDelta(), 0.1); // Cap delta to prevent large jumps
+            
+            // Apply smoothing to first target
+            if (targetFound) {
+                // Extract world transform from anchor
+                anchor.group.getWorldPosition(anchorWorldPosition);
+                anchor.group.getWorldQuaternion(anchorWorldQuaternion);
+                anchor.group.getWorldScale(anchorWorldScale);
+                
+                // Smoothly interpolate smoothed group to match anchor's world transform
+                smoothed.position.lerp(anchorWorldPosition, smoothingAlpha);
+                smoothed.quaternion.slerp(anchorWorldQuaternion, smoothingAlpha);
+                smoothed.scale.lerp(anchorWorldScale, smoothingAlpha);
+            }
+            
+            // Apply smoothing to second target
+            if (secondTargetFound && secondSmoothed && secondAnchor) {
+                // Extract world transform from second anchor
+                secondAnchor.group.getWorldPosition(secondAnchorWorldPosition);
+                secondAnchor.group.getWorldQuaternion(secondAnchorWorldQuaternion);
+                secondAnchor.group.getWorldScale(secondAnchorWorldScale);
+                
+                // Smoothly interpolate second smoothed group to match second anchor's world transform
+                secondSmoothed.position.lerp(secondAnchorWorldPosition, smoothingAlpha);
+                secondSmoothed.quaternion.slerp(secondAnchorWorldQuaternion, smoothingAlpha);
+                secondSmoothed.scale.lerp(secondAnchorWorldScale, smoothingAlpha);
+            }
             
             // Update all animation mixers for first target
             models.forEach(model => {
