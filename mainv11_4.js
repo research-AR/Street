@@ -1310,12 +1310,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // Animation mixer for updating animations
         const clock = new THREE.Clock();
         
-        // Smoothing parameters for lerp/slerp with distance-based adaptation
-        const baseSmoothingAlpha = 0.15; // Base smoothing (lower = smoother)
-        const minSmoothingAlpha = 0.08;  // Maximum smoothing when very close
-        const maxSmoothingAlpha = 0.25;  // Minimum smoothing when far
-        const closeDistance = 0.3;       // Distance considered "close" to target
-        const farDistance = 1.5;         // Distance considered "far" from target
+        // Constant smoothing parameter - applied at all distances
+        // Lower value = smoother but slightly more lag
+        // Higher value = more responsive but more jitter
+        const smoothingAlpha = 0.05; // MAXIMUM smoothness - testing mode (very aggressive smoothing)
         
         // Helper matrices and vectors for world transform extraction
         const anchorWorldPosition = new THREE.Vector3();
@@ -1326,56 +1324,33 @@ document.addEventListener('DOMContentLoaded', () => {
         const secondAnchorWorldQuaternion = new THREE.Quaternion();
         const secondAnchorWorldScale = new THREE.Vector3();
         
-        // Helper function to calculate adaptive smoothing based on distance
-        function getAdaptiveSmoothingAlpha(distance) {
-            // When close: more smoothing (lower alpha)
-            // When far: less smoothing (higher alpha) for responsiveness
-            if (distance < closeDistance) {
-                return minSmoothingAlpha; // Maximum smoothing when very close
-            } else if (distance > farDistance) {
-                return maxSmoothingAlpha; // Less smoothing when far
-            } else {
-                // Linear interpolation between close and far
-                const t = (distance - closeDistance) / (farDistance - closeDistance);
-                return minSmoothingAlpha + t * (maxSmoothingAlpha - minSmoothingAlpha);
-            }
-        }
-        
         renderer.setAnimationLoop(() => {
             const delta = Math.min(clock.getDelta(), 0.1); // Cap delta to prevent large jumps
             
-            // Apply smoothing to first target
+            // Apply constant smoothing to first target
             if (targetFound) {
                 // Extract world transform from anchor
                 anchor.group.getWorldPosition(anchorWorldPosition);
                 anchor.group.getWorldQuaternion(anchorWorldQuaternion);
                 anchor.group.getWorldScale(anchorWorldScale);
                 
-                // Calculate distance from camera to target for adaptive smoothing
-                const distanceToTarget = camera.position.distanceTo(anchorWorldPosition);
-                const adaptiveAlpha = getAdaptiveSmoothingAlpha(distanceToTarget);
-                
                 // Smoothly interpolate smoothed group to match anchor's world transform
-                smoothed.position.lerp(anchorWorldPosition, adaptiveAlpha);
-                smoothed.quaternion.slerp(anchorWorldQuaternion, adaptiveAlpha);
-                smoothed.scale.lerp(anchorWorldScale, adaptiveAlpha);
+                smoothed.position.lerp(anchorWorldPosition, smoothingAlpha);
+                smoothed.quaternion.slerp(anchorWorldQuaternion, smoothingAlpha);
+                smoothed.scale.lerp(anchorWorldScale, smoothingAlpha);
             }
             
-            // Apply smoothing to second target
+            // Apply constant smoothing to second target
             if (secondTargetFound && secondSmoothed && secondAnchor) {
                 // Extract world transform from second anchor
                 secondAnchor.group.getWorldPosition(secondAnchorWorldPosition);
                 secondAnchor.group.getWorldQuaternion(secondAnchorWorldQuaternion);
                 secondAnchor.group.getWorldScale(secondAnchorWorldScale);
                 
-                // Calculate distance from camera to target for adaptive smoothing
-                const distanceToSecondTarget = camera.position.distanceTo(secondAnchorWorldPosition);
-                const adaptiveAlpha = getAdaptiveSmoothingAlpha(distanceToSecondTarget);
-                
                 // Smoothly interpolate second smoothed group to match second anchor's world transform
-                secondSmoothed.position.lerp(secondAnchorWorldPosition, adaptiveAlpha);
-                secondSmoothed.quaternion.slerp(secondAnchorWorldQuaternion, adaptiveAlpha);
-                secondSmoothed.scale.lerp(secondAnchorWorldScale, adaptiveAlpha);
+                secondSmoothed.position.lerp(secondAnchorWorldPosition, smoothingAlpha);
+                secondSmoothed.quaternion.slerp(secondAnchorWorldQuaternion, smoothingAlpha);
+                secondSmoothed.scale.lerp(secondAnchorWorldScale, smoothingAlpha);
             }
             
             // Update all animation mixers for first target
