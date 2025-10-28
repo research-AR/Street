@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WebAR Demo (MindAR + Three.js)</title>
+
+  <!-- Import map per MindAR v1.2.x docs -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+      "mindar-image-three": "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"
+    }
+  }
+  </script>
+
+  <style>
+    html, body { margin:0; height:100%; overflow:hidden; background:#000; }
+    #ar-container { position:fixed; inset:0; }
+  </style>
+</head>
+<body>
+  <div id="ar-container"></div>
+
+  <!-- Your app as an ES module -->
+  <script type="module" src="./mainv11_4.js"></script>
+</body>
+</html>
