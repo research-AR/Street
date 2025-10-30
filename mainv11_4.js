@@ -564,6 +564,22 @@ document.addEventListener('DOMContentLoaded', () => {
             (err) => console.error("[GLTF] ghost3 load error:", err)
         );
 
+        // Occluder 4 - Additional depth layer
+        loader.load(
+            "./applications-20230306/applications/assets/DataModel11_3/Ghostgunes.gltf",
+            (gltf) => {
+                const ghostScene = gltf.scene;
+                ghostScene.position.set(0, 0, 0);
+                ghostScene.rotation.set(0, 0, 0);
+                prepOccluder(ghostScene);        // make it "ghost"
+                smoothed.add(ghostScene);        // Add to smoothed group for consistent positioning
+                ghostScene.visible = true;
+                console.log("[OCCLUDER] Ghost4 (additional layer) loaded on first target");
+            },
+            undefined,
+            (err) => console.error("[GLTF] ghost4 load error:", err)
+        );
+
 
         // ============ LOAD YOUR MODELS (per-model transforms) ============
 
@@ -1349,7 +1365,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Constant smoothing parameter - applied at all distances
         // Lower value = smoother but slightly more lag
         // Higher value = more responsive but more jitter
-        const smoothingAlpha = 0.05; // MAXIMUM smoothness - testing mode (very aggressive smoothing)
+        const smoothingAlpha = 0.08; // Optimized balance: minimal jitter with acceptable lag
         
         // Helper matrices and vectors for world transform extraction
         const anchorWorldPosition = new THREE.Vector3();
