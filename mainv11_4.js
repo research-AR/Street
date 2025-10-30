@@ -14,7 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const mindarThree = new MindARThree({
             container: arContainer,
-            imageTargetSrc: "./applications-20230306/applications/assets/targets/targetscerceve.mind",
+            imageTargetSrc: "./applications-20230306/applications/assets/targets/signcerceve.mind",
             maxTrack: 2, // Allow tracking of 2 targets
             filterMinCF: 0.0001, // Lower value for better tracking
             filterBeta: 10,      // Higher value for more smoothing (was 1000, which is too high)
@@ -51,7 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // --- HUD (screen-fixed arrows) ---
         injectHUDStyles();
-        const { hud, prevB, nextB, label } = createHUD(); // appended to <body>, hidden by default
+        const { hud, prevB, nextB, replayB, label } = createHUD(); // appended to <body>, hidden by default
         hud.hidden = true;
 
         // --- models list + helpers ---
@@ -202,6 +202,20 @@ document.addEventListener('DOMContentLoaded', () => {
             index = nextLoaded(index, delta >= 0 ? +1 : -1);
             applyVisibility();
         }
+        
+        // Replay current scene function
+        function replayCurrentScene() {
+            console.log(`Replaying scene ${index}...`);
+            const controller = slotControllers[index];
+            if (controller && controller.isComposite) {
+                // Reset and restart the composite sequence
+                controller.onLeave(); // Clean up current state
+                controller.onEnter(); // Restart sequence
+                console.log(`Scene ${index} replay initiated`);
+            } else {
+                console.log(`Scene ${index} is not a composite scene, no replay needed`);
+            }
+        }
 
         // Set up navigation button handlers for first target
         const goPrev = () => {
@@ -218,8 +232,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 showDelta(+1);
             }
         };
+        const goReplay = () => {
+            if (secondTargetActive) {
+                replaySecondTargetScene();
+            } else {
+                replayCurrentScene();
+            }
+        };
         prevB.addEventListener('click', goPrev);
         nextB.addEventListener('click', goNext);
+        replayB.addEventListener('click', goReplay);
         
         // ============ SECOND TARGET NAVIGATION ============
         // Navigation functions for second target (similar to first target)
@@ -253,6 +275,20 @@ document.addEventListener('DOMContentLoaded', () => {
             if (secondCountLoaded() === 0) return;
             secondIndex = secondNextLoaded(secondIndex, delta >= 0 ? +1 : -1);
             secondApplyVisibility();
+        }
+        
+        // Replay current second target scene function
+        function replaySecondTargetScene() {
+            console.log(`Replaying second target scene ${secondIndex}...`);
+            const controller = secondSlotControllers[secondIndex];
+            if (controller && controller.isComposite) {
+                // Reset and restart the composite sequence
+                controller.onLeave(); // Clean up current state
+                controller.onEnter(); // Restart sequence
+                console.log(`Second target scene ${secondIndex} replay initiated`);
+            } else {
+                console.log(`Second target scene ${secondIndex} is not a composite scene, no replay needed`);
+            }
         }
         
         function secondUpdateLabel() {
@@ -1407,6 +1443,7 @@ document.addEventListener('DOMContentLoaded', () => {
             hud.innerHTML = `
                 <button id="prev" class="arrow" aria-label="Previous">◀</button>
                 <div class="label" id="label">0/0</div>
+                <button id="replay" class="arrow replay-btn" aria-label="Replay">↻</button>
                 <button id="next" class="arrow" aria-label="Next">▶</button>
             `;
             document.body.appendChild(hud);
@@ -1414,6 +1451,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 hud,
                 prevB: hud.querySelector('#prev'),
                 nextB: hud.querySelector('#next'),
+                replayB: hud.querySelector('#replay'),
                 label: hud.querySelector('#label')
             };
         }
@@ -1435,7 +1473,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 border: 0; border-radius: 999px; padding: 12px 16px;
                 font-size: 18px; background: rgba(255,255,255,.92);
                 box-shadow: 0 6px 18px rgba(0,0,0,.25);
-                transition: opacity 0.3s ease;
+                transition: opacity 0.3s ease, transform 0.2s ease;
+                cursor: pointer;
+                }
+                .hud .arrow:hover:not(:disabled) {
+                transform: scale(1.05);
+                background: rgba(255,255,255,1);
+                }
+                .hud .arrow:active:not(:disabled) {
+                transform: scale(0.95);
+                }
+                .hud .replay-btn {
+                font-size: 20px;
+                font-weight: bold;
+                background: rgba(52, 152, 219, 0.92);
+                color: white;
+                }
+                .hud .replay-btn:hover:not(:disabled) {
+                background: rgba(52, 152, 219, 1);
                 }
                 .hud .arrow:disabled {
                 pointer-events: none;
