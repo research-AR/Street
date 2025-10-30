@@ -564,20 +564,33 @@ document.addEventListener('DOMContentLoaded', () => {
             (err) => console.error("[GLTF] ghost3 load error:", err)
         );
 
-        // Occluder 4 - Additional depth layer
+        // Occluder 4 - Additional depth layer (sun/gunes)
         loader.load(
             "./applications-20230306/applications/assets/DataModel11_3/Ghostgunes.gltf",
             (gltf) => {
+                console.log("[OCCLUDER] Ghostgunes.gltf loaded successfully");
                 const ghostScene = gltf.scene;
                 ghostScene.position.set(0, 0, 0);
                 ghostScene.rotation.set(0, 0, 0);
                 prepOccluder(ghostScene);        // make it "ghost"
                 smoothed.add(ghostScene);        // Add to smoothed group for consistent positioning
                 ghostScene.visible = true;
-                console.log("[OCCLUDER] Ghost4 (additional layer) loaded on first target");
+                console.log("[OCCLUDER] Ghost4 (gunes/sun layer) added to scene - visible:", ghostScene.visible);
+                
+                // Double check it's in the scene
+                console.log("[OCCLUDER] Ghost4 in smoothed group:", smoothed.children.includes(ghostScene));
             },
-            undefined,
-            (err) => console.error("[GLTF] ghost4 load error:", err)
+            (progress) => {
+                // Log loading progress
+                if (progress.lengthComputable) {
+                    const percentComplete = (progress.loaded / progress.total) * 100;
+                    console.log(`[OCCLUDER] Ghostgunes loading: ${percentComplete.toFixed(0)}%`);
+                }
+            },
+            (err) => {
+                console.error("[GLTF] ghost4 (Ghostgunes) load error:", err);
+                console.error("[GLTF] Error details:", err.message, err.stack);
+            }
         );
 
 
