@@ -44,7 +44,7 @@
 				1
 			],
 			"translation":[
-				0.5702834129333496,
+				0.00746530294418335,
 				-1.0009243488311768,
 				0.03223533555865288
 			]
@@ -57,6 +57,20 @@
 					"sampler":0,
 					"target":{
 						"node":1,
+						"path":"translation"
+					}
+				},
+				{
+					"sampler":1,
+					"target":{
+						"node":1,
+						"path":"rotation"
+					}
+				},
+				{
+					"sampler":2,
+					"target":{
+						"node":1,
 						"path":"scale"
 					}
 				}
@@ -67,6 +81,35 @@
 					"input":3,
 					"interpolation":"LINEAR",
 					"output":4
+				},
+				{
+					"input":3,
+					"interpolation":"LINEAR",
+					"output":5
+				},
+				{
+					"input":3,
+					"interpolation":"LINEAR",
+					"output":6
+				}
+			]
+		},
+		{
+			"channels":[
+				{
+					"sampler":0,
+					"target":{
+						"node":0,
+						"path":"rotation"
+					}
+				}
+			],
+			"name":"Cube.034Action",
+			"samplers":[
+				{
+					"input":7,
+					"interpolation":"LINEAR",
+					"output":8
 				}
 			]
 		}
@@ -134,9 +177,9 @@
 		{
 			"bufferView":3,
 			"componentType":5126,
-			"count":5,
+			"count":125,
 			"max":[
-				0.16666666666666666
+				5.166666666666667
 			],
 			"min":[
 				0
@@ -146,8 +189,38 @@
 		{
 			"bufferView":4,
 			"componentType":5126,
-			"count":5,
+			"count":125,
 			"type":"VEC3"
+		},
+		{
+			"bufferView":5,
+			"componentType":5126,
+			"count":125,
+			"type":"VEC4"
+		},
+		{
+			"bufferView":6,
+			"componentType":5126,
+			"count":125,
+			"type":"VEC3"
+		},
+		{
+			"bufferView":7,
+			"componentType":5126,
+			"count":1,
+			"max":[
+				4
+			],
+			"min":[
+				4
+			],
+			"type":"SCALAR"
+		},
+		{
+			"bufferView":8,
+			"componentType":5126,
+			"count":1,
+			"type":"VEC4"
 		}
 	],
 	"bufferViews":[
@@ -171,18 +244,38 @@
 		},
 		{
 			"buffer":0,
-			"byteLength":20,
+			"byteLength":500,
 			"byteOffset":1296
 		},
 		{
 			"buffer":0,
-			"byteLength":60,
-			"byteOffset":1316
+			"byteLength":1500,
+			"byteOffset":1796
+		},
+		{
+			"buffer":0,
+			"byteLength":2000,
+			"byteOffset":3296
+		},
+		{
+			"buffer":0,
+			"byteLength":1500,
+			"byteOffset":5296
+		},
+		{
+			"buffer":0,
+			"byteLength":4,
+			"byteOffset":6796
+		},
+		{
+			"buffer":0,
+			"byteLength":16,
+			"byteOffset":6800
 		}
 	],
 	"buffers":[
 		{
-			"byteLength":1376,
+			"byteLength":6816,
 			"uri":"BarV2-8.bin"
 		}
 	]

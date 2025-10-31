@@ -32,6 +32,13 @@
 						"node":0,
 						"path":"translation"
 					}
+				},
+				{
+					"sampler":1,
+					"target":{
+						"node":0,
+						"path":"rotation"
+					}
 				}
 			],
 			"name":"Simsek3Action.003",
@@ -40,6 +47,11 @@
 					"input":4,
 					"interpolation":"LINEAR",
 					"output":5
+				},
+				{
+					"input":4,
+					"interpolation":"LINEAR",
+					"output":6
 				}
 			]
 		}
@@ -114,9 +126,9 @@
 		{
 			"bufferView":4,
 			"componentType":5126,
-			"count":97,
+			"count":125,
 			"max":[
-				4
+				5.166666666666667
 			],
 			"min":[
 				0
@@ -126,8 +138,14 @@
 		{
 			"bufferView":5,
 			"componentType":5126,
-			"count":97,
+			"count":125,
 			"type":"VEC3"
+		},
+		{
+			"bufferView":6,
+			"componentType":5126,
+			"count":125,
+			"type":"VEC4"
 		}
 	],
 	"bufferViews":[
@@ -157,18 +175,23 @@
 		},
 		{
 			"buffer":0,
-			"byteLength":388,
+			"byteLength":500,
 			"byteOffset":1920
 		},
 		{
 			"buffer":0,
-			"byteLength":1164,
-			"byteOffset":2308
+			"byteLength":1500,
+			"byteOffset":2420
+		},
+		{
+			"buffer":0,
+			"byteLength":2000,
+			"byteOffset":3920
 		}
 	],
 	"buffers":[
 		{
-			"byteLength":3472,
+			"byteLength":5920,
 			"uri":"Simsek3.bin"
 		}
 	]

@@ -14,8 +14,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const mindarThree = new MindARThree({
             container: arContainer,
-            imageTargetSrc: "./applications-20230306/applications/assets/targets/signcerceve.mind",
-            maxTrack: 2, // Allow tracking of 2 targets
+            imageTargetSrc: "./applications-20230306/applications/assets/targets/targettoplu.mind",
+            maxTrack: 3, // Allow tracking of 3 targets
             filterMinCF: 0.0001, // Lower value for better tracking
             filterBeta: 10,      // Higher value for more smoothing (was 1000, which is too high)
             warmupTolerance: 10, // More tolerance for warmup
@@ -55,55 +55,83 @@ document.addEventListener('DOMContentLoaded', () => {
         hud.hidden = true;
 
         // --- models list + helpers ---
-        const TOTAL = 4; // Total number of AR scenes (including guide scene)
+        const TOTAL = 3; // Total number of AR scenes on first target
         const models = new Array(TOTAL); // Array to store loaded 3D models
         const slotControllers = new Array(TOTAL);  // optional onEnter/onLeave per slot
         let index = 0; // Current active scene index
         let lastActive = -1; // Previously active scene index
         let targetFound = false; // Track if target is currently found
         
-        // --- Second target system ---
-        let viewedScenes = new Set(); // Track which scenes have been viewed
-        let allScenesCompleted = false; // Track if all scenes are finished
+        // --- Second target system (middle target with 3 scenes, last one is guide) ---
         let secondTargetActive = false; // Track if second target is active
-        let secondAnchor = null; // Second target anchor (created lazily for performance)
+        let secondAnchor = null; // Second target anchor (created when first target completes)
         let secondAnchorInitialized = false; // Track if second anchor has been set up
         
-        // Second target scenes (similar structure to first target)
-        const SECOND_TOTAL = 3; // Total number of scenes on second target
+        // Second target scenes
+        const SECOND_TOTAL = 3; // Total number of scenes on second target (including guide scene)
         const secondModels = new Array(SECOND_TOTAL); // Array to store second target models
         const secondSlotControllers = new Array(SECOND_TOTAL); // Controllers for second target slots
         let secondIndex = 0; // Current active scene on second target
         let secondLastActive = -1; // Previously active scene on second target
         let secondTargetFound = false; // Track if second target is currently visible
+        
+        // --- Third target system (building target) ---
+        let viewedScenes = new Set(); // Track which scenes have been viewed (from first target)
+        let allScenesCompleted = false; // Track if all first target scenes are finished
+        let secondViewedScenes = new Set(); // Track which second target scenes have been viewed
+        let allSecondScenesCompleted = false; // Track if all second target scenes (1&2) are finished
+        let thirdTargetActive = false; // Track if third target is active
+        let thirdAnchor = null; // Third target anchor (created lazily for performance)
+        let thirdAnchorInitialized = false; // Track if third anchor has been set up
+        
+        // Third target scenes (building scenes)
+        const THIRD_TOTAL = 3; // Total number of scenes on third target
+        const thirdModels = new Array(THIRD_TOTAL); // Array to store third target models
+        const thirdSlotControllers = new Array(THIRD_TOTAL); // Controllers for third target slots
+        let thirdIndex = 0; // Current active scene on third target
+        let thirdLastActive = -1; // Previously active scene on third target
+        let thirdTargetFound = false; // Track if third target is currently visible
 
         const loader = new GLTFLoader();
 
         const countLoaded = () => models.filter(Boolean).length;
         const secondCountLoaded = () => secondModels.filter(Boolean).length;
+        const thirdCountLoaded = () => thirdModels.filter(Boolean).length;
         
         function updateLabel() {
         // show current slot number if that slot is loaded; otherwise 0
-            if (index === 3 && allScenesCompleted) {
-                label.textContent = `Guide: Find the Building`;
-            } else {
                 label.textContent = `${models[index] ? index + 1 : 0}/${TOTAL}`;
-            }
         }
         
         // Track scene viewing and check for completion
         function markSceneViewed(sceneIndex) {
-            // Only track first 3 scenes (not the guide scene)
+            // Track all 3 scenes of first target
             if (sceneIndex < 3) {
                 viewedScenes.add(sceneIndex);
-                console.log(`Scene ${sceneIndex + 1} viewed. Total viewed: ${viewedScenes.size}/3`);
+                console.log(`[Target 1] Scene ${sceneIndex + 1} viewed. Total viewed: ${viewedScenes.size}/3`);
                 
-                // Check if first 3 scenes are completed
+                // Check if all 3 scenes are completed
                 if (viewedScenes.size >= 3 && !allScenesCompleted) {
                     allScenesCompleted = true;
-                    console.log('🎉 All content scenes completed! Guide scene unlocked.');
+                    console.log('🎉 All first target scenes completed! Second target will be available.');
                     updateLabel();
-                    updateNavigationButtons(); // Update buttons to enable scene 4
+                    updateNavigationButtons(); // Enable navigation to second target
+                }
+            }
+        }
+        
+        // Track second target scene viewing and check for completion
+        function markSecondSceneViewed(sceneIndex) {
+            // Only track first 2 scenes of second target (not the guide scene 3)
+            if (sceneIndex < 2) {
+                secondViewedScenes.add(sceneIndex);
+                console.log(`[Target 2] Scene ${sceneIndex + 1} viewed. Total viewed: ${secondViewedScenes.size}/2`);
+                
+                // Check if scenes 1 & 2 are completed
+                if (secondViewedScenes.size >= 2 && !allSecondScenesCompleted) {
+                    allSecondScenesCompleted = true;
+                    console.log('🎉 All second target scenes completed! Guide scene (scene 3) unlocked.');
+                    secondUpdateNavigationButtons(); // Enable navigation to scene 3 (guide)
                 }
             }
         }
@@ -169,12 +197,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     markSceneViewed(index);
                 }
                 
-                // Initialize second anchor when reaching scene 4 (guide scene)
-                if (index === 3 && !secondAnchorInitialized) {
-                    console.log('📍 Initializing second target tracking (scene 4 reached)...');
-                    initializeSecondAnchor();
-                }
-                
                 lastActive = index;
             }
             
@@ -187,10 +209,6 @@ document.addEventListener('DOMContentLoaded', () => {
             let i = from;
             for (let step = 0; step < TOTAL; step++) {
                 i = (i + dir + TOTAL) % TOTAL;
-                // Skip scene 4 (guide) if first 3 scenes not completed
-                if (i === 3 && !allScenesCompleted) {
-                    continue;
-                }
                 if (models[i]) return i;
             }
             return from; 
@@ -202,7 +220,7 @@ document.addEventListener('DOMContentLoaded', () => {
             index = nextLoaded(index, delta >= 0 ? +1 : -1);
             applyVisibility();
         }
-        
+
         // Replay current scene function
         function replayCurrentScene() {
             console.log(`Replaying scene ${index}...`);
@@ -217,23 +235,38 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // Set up navigation button handlers for first target
+        // Set up navigation button handlers for all targets
         const goPrev = () => {
-            if (secondTargetActive) {
+            if (thirdTargetActive) {
+                thirdShowDelta(-1);
+            } else if (secondTargetActive) {
                 secondShowDelta(-1);
             } else {
                 showDelta(-1);
             }
         };
         const goNext = () => {
-            if (secondTargetActive) {
+            if (thirdTargetActive) {
+                thirdShowDelta(+1);
+            } else if (secondTargetActive) {
                 secondShowDelta(+1);
             } else {
+                // Check if on first target and all scenes completed
+                if (index === TOTAL - 1 && allScenesCompleted && !secondAnchorInitialized) {
+                    // User clicked next after completing all first target scenes
+                    // Initialize second target and show message
+                    console.log('🚀 Initializing second target...');
+                    initializeSecondAnchor();
+                    showScanSecondTargetMessage();
+            } else {
                 showDelta(+1);
+                }
             }
         };
         const goReplay = () => {
-            if (secondTargetActive) {
+            if (thirdTargetActive) {
+                replayThirdTargetScene();
+            } else if (secondTargetActive) {
                 replaySecondTargetScene();
             } else {
                 replayCurrentScene();
@@ -246,7 +279,12 @@ document.addEventListener('DOMContentLoaded', () => {
         // ============ SECOND TARGET NAVIGATION ============
         // Navigation functions for second target (similar to first target)
         function secondApplyVisibility() {
+            // Hide all first target models when on second target
+            models.forEach(m => { if (m) m.visible = false; });
+            
+            // Show only current second target scene
             secondModels.forEach((m, i) => { if (m) m.visible = (i === secondIndex); });
+            
             // fire leave/enter once per slot change
             if (secondLastActive !== secondIndex) {
                 if (secondLastActive >= 0 && secondSlotControllers[secondLastActive]?.onLeave) {
@@ -255,6 +293,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (secondSlotControllers[secondIndex]?.onEnter) {
                     secondSlotControllers[secondIndex].onEnter();
                 }
+                
+                // Mark this scene as viewed
+                if (secondModels[secondIndex]) {
+                    markSecondSceneViewed(secondIndex);
+                }
+                
+                // Initialize third anchor when reaching scene 3 (guide scene) of second target
+                if (secondIndex === 2 && !thirdAnchorInitialized) {
+                    console.log('📍 Initializing third target tracking (second target scene 3 reached)...');
+                    initializeThirdAnchor();
+                }
+                
                 secondLastActive = secondIndex;
             }
             
@@ -266,6 +316,10 @@ document.addEventListener('DOMContentLoaded', () => {
             let i = from;
             for (let step = 0; step < SECOND_TOTAL; step++) {
                 i = (i + dir + SECOND_TOTAL) % SECOND_TOTAL;
+                // Skip scene 3 (guide) if first 2 scenes not completed
+                if (i === 2 && !allSecondScenesCompleted) {
+                    continue;
+                }
                 if (secondModels[i]) return i;
             }
             return from;
@@ -273,7 +327,9 @@ document.addEventListener('DOMContentLoaded', () => {
         
         function secondShowDelta(delta) {
             if (secondCountLoaded() === 0) return;
+            console.log(`[Target 2] Navigating from scene ${secondIndex} with delta ${delta}`);
             secondIndex = secondNextLoaded(secondIndex, delta >= 0 ? +1 : -1);
+            console.log(`[Target 2] Now on scene ${secondIndex}`);
             secondApplyVisibility();
         }
         
@@ -292,7 +348,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         function secondUpdateLabel() {
-            label.textContent = `Building ${secondIndex + 1}/${SECOND_TOTAL}`;
+            if (secondIndex === 2 && allSecondScenesCompleted) {
+                label.textContent = `Guide: Find the Building`;
+            } else {
+                label.textContent = `Target 2 - Scene ${secondIndex + 1}/${SECOND_TOTAL}`;
+            }
+        }
+        
+        function thirdUpdateLabel() {
+            label.textContent = `Building ${thirdIndex + 1}/${THIRD_TOTAL}`;
         }
         
         function secondUpdateNavigationButtons() {
@@ -309,8 +373,94 @@ document.addEventListener('DOMContentLoaded', () => {
             if (currentSlot && currentSlot.isComposite) {
                 const allPartsVisible = currentSlot.areAllPartsVisible ? currentSlot.areAllPartsVisible() : true;
                 canGoNext = allPartsVisible && secondIndex < loadedCount - 1;
+                
+                // Block navigation from scene 2 to scene 3 (guide) until scenes 1&2 completed
+                if (secondIndex === 1 && !allSecondScenesCompleted) {
+                    canGoNext = false;
+                }
             } else {
                 canGoNext = secondIndex < loadedCount - 1;
+                
+                // Block navigation from scene 2 to scene 3 (guide) until scenes 1&2 completed
+                if (secondIndex === 1 && !allSecondScenesCompleted) {
+                    canGoNext = false;
+                }
+            }
+            
+            nextB.disabled = !canGoNext;
+            nextB.style.opacity = canGoNext ? '1' : '0.5';
+        }
+        
+        // ============ THIRD TARGET NAVIGATION ============
+        // Navigation functions for third target (building target)
+        function thirdApplyVisibility() {
+            // Hide all other targets' models when on third target
+            models.forEach(m => { if (m) m.visible = false; });
+            secondModels.forEach(m => { if (m) m.visible = false; });
+            
+            // Show only current third target scene
+            thirdModels.forEach((m, i) => { if (m) m.visible = (i === thirdIndex); });
+            
+            // fire leave/enter once per slot change
+            if (thirdLastActive !== thirdIndex) {
+                if (thirdLastActive >= 0 && thirdSlotControllers[thirdLastActive]?.onLeave) {
+                    thirdSlotControllers[thirdLastActive].onLeave();
+                }
+                if (thirdSlotControllers[thirdIndex]?.onEnter) {
+                    thirdSlotControllers[thirdIndex].onEnter();
+                }
+                thirdLastActive = thirdIndex;
+            }
+            
+            thirdUpdateLabel();
+            thirdUpdateNavigationButtons();
+        }
+        
+        function thirdNextLoaded(from, dir) {
+            let i = from;
+            for (let step = 0; step < THIRD_TOTAL; step++) {
+                i = (i + dir + THIRD_TOTAL) % THIRD_TOTAL;
+                if (thirdModels[i]) return i;
+            }
+            return from;
+        }
+        
+        function thirdShowDelta(delta) {
+            if (thirdCountLoaded() === 0) return;
+            thirdIndex = thirdNextLoaded(thirdIndex, delta >= 0 ? +1 : -1);
+            thirdApplyVisibility();
+        }
+        
+        // Replay current third target scene function
+        function replayThirdTargetScene() {
+            console.log(`Replaying third target scene ${thirdIndex}...`);
+            const controller = thirdSlotControllers[thirdIndex];
+            if (controller && controller.isComposite) {
+                // Reset and restart the composite sequence
+                controller.onLeave(); // Clean up current state
+                controller.onEnter(); // Restart sequence
+                console.log(`Third target scene ${thirdIndex} replay initiated`);
+            } else {
+                console.log(`Third target scene ${thirdIndex} is not a composite scene, no replay needed`);
+            }
+        }
+        
+        function thirdUpdateNavigationButtons() {
+            const currentSlot = thirdSlotControllers[thirdIndex];
+            const loadedCount = thirdCountLoaded();
+            
+            // Check if we can go to previous scene
+            const canGoPrev = thirdIndex > 0;
+            prevB.disabled = !canGoPrev;
+            prevB.style.opacity = canGoPrev ? '1' : '0.5';
+            
+            // Check if we can go to next scene
+            let canGoNext = false;
+            if (currentSlot && currentSlot.isComposite) {
+                const allPartsVisible = currentSlot.areAllPartsVisible ? currentSlot.areAllPartsVisible() : true;
+                canGoNext = allPartsVisible && thirdIndex < loadedCount - 1;
+            } else {
+                canGoNext = thirdIndex < loadedCount - 1;
             }
             
             nextB.disabled = !canGoNext;
@@ -332,16 +482,19 @@ document.addEventListener('DOMContentLoaded', () => {
             if (currentSlot && currentSlot.isComposite) {
                 // For composite slots, check if all parts are visible
                 const allPartsVisible = currentSlot.areAllPartsVisible ? currentSlot.areAllPartsVisible() : true;
-                // Can go next if parts visible AND (not at scene 3 OR all scenes completed to unlock scene 4)
                 canGoNext = allPartsVisible && index < loadedCount - 1;
-                if (index === 2 && !allScenesCompleted) {
-                    canGoNext = false; // Block navigation from scene 3 to 4 until completed
+                
+                // Special case: if on last scene (index 2) and all scenes completed, enable next to go to second target
+                if (index === TOTAL - 1 && allScenesCompleted && allPartsVisible) {
+                    canGoNext = true; // Enable to initialize second target
                 }
             } else {
                 // For regular slots, just check if there's a next scene
                 canGoNext = index < loadedCount - 1;
-                if (index === 2 && !allScenesCompleted) {
-                    canGoNext = false; // Block navigation from scene 3 to 4 until completed
+                
+                // Special case: if on last scene and all completed, enable next to go to second target
+                if (index === TOTAL - 1 && allScenesCompleted) {
+                    canGoNext = true; // Enable to initialize second target
                 }
             }
             
@@ -351,7 +504,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Show HUD only while target is tracked
         anchor.onTargetFound = () => { 
+            // CRITICAL: Only activate Target 1 if no other target is active
+            if (secondTargetActive || thirdTargetActive) {
+                console.log('⚠️ Target 1 found but another target is active - ignoring to prevent interference');
+                console.log('[Debug] Active states - Target2:', secondTargetActive, 'Target3:', thirdTargetActive);
+                return; // Don't activate first target if another is active
+            }
+            
+            console.log('🎯 Target 1 found! Activating...');
             hud.hidden = false; 
+            
+            // Hide all other targets' models
+            secondModels.forEach(m => { if (m) m.visible = false; });
+            thirdModels.forEach(m => { if (m) m.visible = false; });
             
             // Initialize smoothed group position on first detection to prevent initial snap
             if (!targetFound) {
@@ -362,7 +527,17 @@ document.addEventListener('DOMContentLoaded', () => {
             
             targetFound = true;
             
-            console.log(`Target found! Current slot: ${index}, slotControllers[${index}]:`, slotControllers[index]);
+            console.log(`Target 1 found! Current slot: ${index}, slotControllers[${index}]:`, slotControllers[index]);
+            
+            // Deactivate other targets
+            secondTargetActive = false;
+            thirdTargetActive = false;
+            
+            // Show first target occluders
+            showFirstTargetOccluders();
+            
+            // Re-apply visibility to show current scene
+            applyVisibility();
             
             // Trigger composite sequence if we're on a composite slot and it hasn't started yet
             if (slotControllers[index] && slotControllers[index].isComposite && !slotControllers[index].started) {
@@ -373,17 +548,22 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
         anchor.onTargetLost = () => { 
-            hud.hidden = true; 
+            console.log('Target 1 lost.');
             targetFound = false;
+            // Only hide HUD if no other target is active
+            if (!secondTargetActive && !thirdTargetActive) {
+                hud.hidden = true;
+            }
+            // Note: We don't hide the models here, as user might switch to another target
         };
         
-        // ============ SECOND TARGET HANDLERS ============
-        // Initialize second anchor and its event handlers (called when scene 4 is reached)
+        // ============ SECOND TARGET HANDLERS (Middle Target) ============
+        // Initialize second anchor and its event handlers (created immediately)
         function initializeSecondAnchor() {
             if (secondAnchorInitialized) return; // Already initialized
             
-            console.log('Creating second anchor for building tracking...');
-            secondAnchor = mindarThree.addAnchor(1); // Create second target anchor
+            console.log('Creating second anchor (middle target) for tracking...');
+            secondAnchor = mindarThree.addAnchor(1); // Create second target anchor (index 1)
             secondAnchorInitialized = true;
             
             // Create second smoothed group for second target (at scene level)
@@ -400,15 +580,38 @@ document.addEventListener('DOMContentLoaded', () => {
         // Set up event handlers for second target
         function setupSecondTargetHandlers() {
             secondAnchor.onTargetFound = () => {
-                if (allScenesCompleted) {
-                    console.log('🎯 Second target (building) found! Showing building scenes...');
-                    
-                    // Initialize second smoothed group position on first detection to prevent initial snap
-                    if (!secondTargetFound && secondSmoothed) {
-                        secondAnchor.group.getWorldPosition(secondSmoothed.position);
-                        secondAnchor.group.getWorldQuaternion(secondSmoothed.quaternion);
-                        secondAnchor.group.getWorldScale(secondSmoothed.scale);
-                    }
+                // Only activate if first target scenes are completed
+                if (!allScenesCompleted) {
+                    console.log('Second target found but first target scenes not completed yet.');
+                    showNotReadyMessage();
+                    return;
+                }
+                
+                // CRITICAL: Only activate Target 2 if no other target is active
+                if (thirdTargetActive) {
+                    console.log('⚠️ Target 2 found but Target 3 is active - ignoring to prevent interference');
+                    return;
+                }
+                
+                console.log('🎯 Second target (middle) found! Showing scenes...');
+                console.log('[Debug] Activating Target 2, current scene:', secondIndex);
+                
+                // Hide all other targets' models
+                models.forEach(m => { if (m) m.visible = false; });
+                thirdModels.forEach(m => { if (m) m.visible = false; });
+                
+                // Hide first target occluders (they only apply to first target)
+                hideFirstTargetOccluders();
+                
+                // Deactivate other targets
+                thirdTargetActive = false;
+                
+                // Initialize second smoothed group position on first detection to prevent initial snap
+                if (!secondTargetFound && secondSmoothed) {
+                    secondAnchor.group.getWorldPosition(secondSmoothed.position);
+                    secondAnchor.group.getWorldQuaternion(secondSmoothed.quaternion);
+                    secondAnchor.group.getWorldScale(secondSmoothed.scale);
+                }
                     
                     secondTargetActive = true;
                     secondTargetFound = true;
@@ -423,54 +626,121 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     
                     showSecondTargetContent();
-                } else {
-                    console.log('Second target found but scenes not completed yet.');
-                    showNotReadyMessage();
-                }
             };
             
             secondAnchor.onTargetLost = () => {
                 if (secondTargetActive) {
-                    console.log('Second target lost.');
+                    console.log('⚠️ Second target tracking lost! Deactivating second target.');
+                    console.log('[Debug] Current states - Target1:', targetFound, 'Target2:', secondTargetFound, 'Target3:', thirdTargetFound);
                     secondTargetActive = false;
                     secondTargetFound = false;
-                    hud.hidden = true;
+                    // Only hide HUD if no other target is active
+                    if (!targetFound && !thirdTargetActive) {
+                        hud.hidden = true;
+                        console.log('[Debug] HUD hidden - no active targets');
+                    }
                     hideSecondTargetContent();
                 }
             };
         }
         
-        // Load all second target scenes (called when second anchor is initialized)
+        // Load all second target scenes (3 scenes, last one is guide)
         function loadSecondTargetScenes() {
-            console.log('Loading second target scenes...');
+            console.log('Loading second target (middle) scenes...');
             
-            // Second Target Scene 1 - Building Scene 1
+            // Second Target Scene 1 - Composite scene
             secondLoadComposite(0, [
-                "./applications-20230306/applications/assets/DataModel11_3/kup.gltf", 
+                "./applications-20230306/applications/assets/DataModel11_3/Franz/Sahne1/gunes.gltf", 
+                "./applications-20230306/applications/assets/DataModel11_3/Franz/Sahne1/yazi1.gltf",
+                "./applications-20230306/applications/assets/DataModel11_3/Franz/Sahne1/yazi2.gltf",  
+                "./applications-20230306/applications/assets/DataModel11_3/Franz/Sahne1/yazi3.gltf", 
+                "./applications-20230306/applications/assets/DataModel11_3/Franz/Sahne1/yazi4.gltf", 
+                "./applications-20230306/applications/assets/DataModel11_3/Franz/Sahne1/binalar.gltf", 
+                "./applications-20230306/applications/assets/DataModel11_3/Franz/Sahne1/isiklar.gltf", 
             ], 
-            [0, ],  // Timing: part1 at 0ms, part2 at 2000ms
-            [0, ]);     // hideAfter: both stay forever
+            [0, 0, 250, 500, 750, 1000, 1000,],     // Timing
+            [0, 0, 0, 0, 0, 0, 0]);       // hideAfter: stays forever
             
-            // Second Target Scene 2 - Building Scene 2
+            // Second Target Scene 2 - Composite scene
+            // TEMPORARY: Add at least one model to prevent empty scene issues
             secondLoadComposite(1, [
-                // Add your second target scene 2 models here
-                // Example: "./applications-20230306/applications/assets/BuildingScenes/Scene2/part1.gltf",
+                "./applications-20230306/applications/assets/DataModel11_3/Franz/Sahne2/cizgi1.gltf",
+                "./applications-20230306/applications/assets/DataModel11_3/Franz/Sahne2/cizgikapanacak.gltf",
+                
+                "./applications-20230306/applications/assets/DataModel11_3/Franz/Sahne2/gunesgltf.gltf", 
+                "./applications-20230306/applications/assets/DataModel11_3/Franz/Sahne2/Soru1.gltf",
+                "./applications-20230306/applications/assets/DataModel11_3/Franz/Sahne2/Soru2.gltf",  
+                "./applications-20230306/applications/assets/DataModel11_3/Franz/Sahne2/Soru3.gltf", 
+                "./applications-20230306/applications/assets/DataModel11_3/Franz/Sahne2/Soru4.gltf", 
+                "./applications-20230306/applications/assets/DataModel11_3/Franz/Sahne1/binalar.gltf", 
+                "./applications-20230306/applications/assets/DataModel11_3/Franz/Sahne1/isiklar.gltf", 
+
+                "./applications-20230306/applications/assets/DataModel11_3/Franz/Sahne2/cizgi2.gltf", 
+                "./applications-20230306/applications/assets/DataModel11_3/Franz/Sahne2/ok.gltf",               
+                "./applications-20230306/applications/assets/DataModel11_3/Franz/Sahne2/cizgi3.gltf", 
+                "./applications-20230306/applications/assets/DataModel11_3/Franz/Sahne2/cizgi4.gltf", 
+                "./applications-20230306/applications/assets/DataModel11_3/Franz/Sahne2/cizgi5.gltf", 
+
+
+                "./applications-20230306/applications/assets/DataModel11_3/Franz/Sahne2/isiklar.gltf", 
             ], 
-            [0],     // Timing: appears immediately
-            [0]);    // hideAfter: stays forever
+            [0, 0, 
+            0, 0, 250, 500, 750, 0, 0,
+            1000, 1000, 1250, 2500, 1000,
+            0,],   
+              // Timing: appears immediately
+            [0, 1000,
+            0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0,
+            0,]);    // hideAfter: stays forever
             
-            // Second Target Scene 3 - Building Scene 3
-            secondLoadComposite(2, [
-                // Add your second target scene 3 models here
-                // Example: "./applications-20230306/applications/assets/BuildingScenes/Scene3/part1.gltf",
-            ], 
-            [0],     // Timing: appears immediately
-            [0]);    // hideAfter: stays forever
+            // Second Target Scene 3 - Guide scene (line drawing)
+            loadSecondTargetGuideScene();
+        }
+        
+        // Load guide scene for second target (scene 3)
+        function loadSecondTargetGuideScene() {
+            const group = new THREE.Group();
+            group.name = 'second-target-guide-scene';
+            
+            // Create a plane for the line drawing image
+            const textureLoader = new THREE.TextureLoader();
+            textureLoader.load(
+                './applications-20230306/applications/assets/DataModel11_3/Sahne4/binacizgi.png',
+                (texture) => {
+                    // Create plane geometry with appropriate aspect ratio
+                    const aspectRatio = texture.image.width / texture.image.height;
+                    const planeWidth = 0.3;
+                    const planeHeight = planeWidth / aspectRatio;
+                    
+                    const geometry = new THREE.PlaneGeometry(planeWidth, planeHeight);
+                    const material = new THREE.MeshBasicMaterial({
+                        map: texture,
+                        transparent: true,
+                        side: THREE.DoubleSide
+                    });
+                    
+                    const linePlane = new THREE.Mesh(geometry, material);
+                    linePlane.position.set(0, 0.05, 0); // Slightly above the target
+                    group.add(linePlane);
+                    
+                    // Add instruction text
+                    createTextSprite('Turn to your right\nuntil you match the line', group);
+                    
+                    secondRegister(group, 2); // Register as second target scene 3 (index 2)
+                },
+                undefined,
+                (err) => console.error('Error loading second target guide image:', err)
+            );
         }
         
         // Show content for second target
         function showSecondTargetContent() {
             console.log('Displaying second target composite scenes...');
+            console.log('[Target 2] Current scene index:', secondIndex);
+            console.log('[Target 2] Scene model exists:', !!secondModels[secondIndex]);
+            // Ensure first target models are hidden
+            models.forEach(m => { if (m) m.visible = false; });
             // Show the current scene on second target
             secondApplyVisibility();
         }
@@ -482,8 +752,138 @@ document.addEventListener('DOMContentLoaded', () => {
             secondModels.forEach(m => { if (m) m.visible = false; });
         }
         
+        // ============ THIRD TARGET HANDLERS (Building Target) ============
+        // Initialize third anchor and its event handlers (called when scene 4 is reached)
+        function initializeThirdAnchor() {
+            if (thirdAnchorInitialized) return; // Already initialized
+            
+            console.log('Creating third anchor for building tracking...');
+            thirdAnchor = mindarThree.addAnchor(2); // Create third target anchor (index 2)
+            thirdAnchorInitialized = true;
+            
+            // Create third smoothed group for third target (at scene level)
+            thirdSmoothed = new THREE.Group();
+            scene.add(thirdSmoothed); // Add to scene for independent interpolation
+            
+            // Set up event handlers for third target
+            setupThirdTargetHandlers();
+            
+            // Load third target scenes
+            loadThirdTargetScenes();
+        }
         
-        // Show message when second target found but not ready
+        // Set up event handlers for third target
+        function setupThirdTargetHandlers() {
+            thirdAnchor.onTargetFound = () => {
+                // Only activate if BOTH first and second target scenes are completed
+                if (!allScenesCompleted || !allSecondScenesCompleted) {
+                    console.log('Third target found but previous targets not completed yet.');
+                    showNotReadyForThirdTargetMessage();
+                    return;
+                }
+                
+                // CRITICAL: Only activate Target 3 if no other target is active
+                if (secondTargetActive) {
+                    console.log('⚠️ Target 3 found but Target 2 is active - ignoring to prevent interference');
+                    return;
+                }
+                
+                console.log('🎯 Third target (building) found! Showing building scenes...');
+                console.log('[Debug] Activating Target 3, current scene:', thirdIndex);
+                
+                // Hide all other targets' models
+                models.forEach(m => { if (m) m.visible = false; });
+                secondModels.forEach(m => { if (m) m.visible = false; });
+                
+                // Hide first target occluders (they only apply to first target)
+                hideFirstTargetOccluders();
+                
+                // Deactivate other targets
+                secondTargetActive = false;
+                
+                // Initialize third smoothed group position on first detection to prevent initial snap
+                if (!thirdTargetFound && thirdSmoothed) {
+                    thirdAnchor.group.getWorldPosition(thirdSmoothed.position);
+                    thirdAnchor.group.getWorldQuaternion(thirdSmoothed.quaternion);
+                    thirdAnchor.group.getWorldScale(thirdSmoothed.scale);
+                }
+                
+                thirdTargetActive = true;
+                thirdTargetFound = true;
+                // Show HUD for navigation
+                hud.hidden = false;
+                thirdUpdateLabel();
+                thirdUpdateNavigationButtons();
+                
+                // Trigger composite sequence if on composite slot
+                if (thirdSlotControllers[thirdIndex] && thirdSlotControllers[thirdIndex].isComposite && !thirdSlotControllers[thirdIndex].started) {
+                    thirdSlotControllers[thirdIndex].startSequenceIfReady();
+                }
+                
+                showThirdTargetContent();
+            };
+            
+            thirdAnchor.onTargetLost = () => {
+                if (thirdTargetActive) {
+                    console.log('Third target lost.');
+                    thirdTargetActive = false;
+                    thirdTargetFound = false;
+                    // Only hide HUD if no other target is active
+                    if (!targetFound && !secondTargetActive) {
+                        hud.hidden = true;
+                    }
+                    hideThirdTargetContent();
+                }
+            };
+        }
+        
+        // Load all third target scenes (3 building scenes)
+        function loadThirdTargetScenes() {
+            console.log('Loading third target (building) scenes...');
+            
+            // Third Target Scene 1 - Building Scene 1
+            thirdLoadComposite(0, [
+                "./applications-20230306/applications/assets/DataModel11_3/kup.gltf", 
+            ], 
+            [0],     // Timing: appears immediately
+            [0]);    // hideAfter: stays forever
+            
+            // Third Target Scene 2 - Building Scene 2
+            thirdLoadComposite(1, [
+                // Add your third target scene 2 models here
+            ], 
+            [0],     // Timing: appears immediately
+            [0]);    // hideAfter: stays forever
+            
+            // Third Target Scene 3 - Building Scene 3
+            thirdLoadComposite(2, [
+                // Add your third target scene 3 models here
+            ], 
+            [0],     // Timing: appears immediately
+            [0]);    // hideAfter: stays forever
+        }
+        
+        // Show content for third target
+        function showThirdTargetContent() {
+            console.log('Displaying third target composite scenes...');
+            console.log('[Target 3] Current scene index:', thirdIndex);
+            console.log('[Target 3] Scene model exists:', !!thirdModels[thirdIndex]);
+            // Ensure other targets' models are hidden
+            models.forEach(m => { if (m) m.visible = false; });
+            secondModels.forEach(m => { if (m) m.visible = false; });
+            // Show the current scene on third target
+            thirdApplyVisibility();
+        }
+        
+        // Hide third target content
+        function hideThirdTargetContent() {
+            console.log('Hiding third target content...');
+            // Hide all third target models
+            thirdModels.forEach(m => { if (m) m.visible = false; });
+        }
+        
+        
+        // Show message when targets found but not ready
         function showNotReadyMessage() {
             const message = document.createElement('div');
             message.style.cssText = `
@@ -493,7 +893,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 transform: translate(-50%, -50%);
                 background: rgba(255, 165, 0, 0.9);
                 color: white;
-                padding: 15px;
+                padding: 20px;
                 border-radius: 8px;
                 font-family: system-ui;
                 font-size: 16px;
@@ -501,8 +901,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 z-index: 10000;
             `;
             message.innerHTML = `
-                <p>⚠️ Complete all 3 scenes first!</p>
-                <p>Then return to this target.</p>
+                <p>⚠️ Complete the first target first!</p>
+                <p>Scan the first target and complete all scenes.</p>
             `;
             document.body.appendChild(message);
             
@@ -513,8 +913,81 @@ document.addEventListener('DOMContentLoaded', () => {
             }, 3000);
         }
 
-        // ============ LOAD OCCLUDERS (always on) ============
-        // Load three separate occluders for different building depths on FIRST target
+        // Show message prompting user to scan second target
+        function showScanSecondTargetMessage() {
+            const message = document.createElement('div');
+            message.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: rgba(46, 204, 113, 0.95);
+                color: white;
+                padding: 25px;
+                border-radius: 12px;
+                font-family: system-ui;
+                font-size: 18px;
+                text-align: center;
+                z-index: 10000;
+                box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+            `;
+            message.innerHTML = `
+                <p style="font-size: 24px; margin: 0 0 10px 0;">✅ First Target Complete!</p>
+                <p style="margin: 10px 0;">Now scan the <strong>second target</strong> to continue</p>
+            `;
+            document.body.appendChild(message);
+            
+            setTimeout(() => {
+                if (message.parentNode) {
+                    message.parentNode.removeChild(message);
+                }
+            }, 4000);
+        }
+        
+        // Show message when third target found but not ready
+        function showNotReadyForThirdTargetMessage() {
+            const message = document.createElement('div');
+            message.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: rgba(255, 165, 0, 0.9);
+                color: white;
+                padding: 20px;
+                border-radius: 8px;
+                font-family: system-ui;
+                font-size: 16px;
+                text-align: center;
+                z-index: 10000;
+            `;
+            message.innerHTML = `
+                <p>⚠️ Complete the first two targets first!</p>
+                <p>Complete all scenes from Target 1 and Target 2.</p>
+            `;
+            document.body.appendChild(message);
+            
+            setTimeout(() => {
+                if (message.parentNode) {
+                    message.parentNode.removeChild(message);
+                }
+            }, 3000);
+        }
+
+        // ============ LOAD OCCLUDERS (for FIRST target only) ============
+        // Array to track all occluders for visibility management
+        const firstTargetOccluders = [];
+        
+        // Helper functions to show/hide first target occluders
+        function showFirstTargetOccluders() {
+            firstTargetOccluders.forEach(occ => { if (occ) occ.visible = true; });
+            console.log('[OCCLUDER] First target occluders shown');
+        }
+        
+        function hideFirstTargetOccluders() {
+            firstTargetOccluders.forEach(occ => { if (occ) occ.visible = false; });
+            console.log('[OCCLUDER] First target occluders hidden');
+        }
         
         // Occluder 1 - Closest/Shortest buildings
         loader.load(
@@ -523,9 +996,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const ghostScene = gltf.scene;
                 ghostScene.position.set(0, 0, 0);
                 ghostScene.rotation.set(0, 0, 0);
+                ghostScene.name = 'occluder-ghost1';
                 prepOccluder(ghostScene);        // make it "ghost"
                 smoothed.add(ghostScene);        // Add to smoothed group for consistent positioning
                 ghostScene.visible = true;
+                firstTargetOccluders.push(ghostScene);
                 console.log("[OCCLUDER] Ghost1 (closest layer) loaded on first target");
             },
             undefined,
@@ -539,9 +1014,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const ghostScene = gltf.scene;
                 ghostScene.position.set(0, 0, 0);
                 ghostScene.rotation.set(0, 0, 0);
+                ghostScene.name = 'occluder-ghost2';
                 prepOccluder(ghostScene);        // make it "ghost"
                 smoothed.add(ghostScene);        // Add to smoothed group for consistent positioning
                 ghostScene.visible = true;
+                firstTargetOccluders.push(ghostScene);
                 console.log("[OCCLUDER] Ghost2 (middle layer) loaded on first target");
             },
             undefined,
@@ -555,9 +1032,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const ghostScene = gltf.scene;
                 ghostScene.position.set(0, 0, 0);
                 ghostScene.rotation.set(0, 0, 0);
+                ghostScene.name = 'occluder-ghost3';
                 prepOccluder(ghostScene);        // make it "ghost"
                 smoothed.add(ghostScene);        // Add to smoothed group for consistent positioning
                 ghostScene.visible = true;
+                firstTargetOccluders.push(ghostScene);
                 console.log("[OCCLUDER] Ghost3 (furthest layer) loaded on first target");
             },
             undefined,
@@ -572,13 +1051,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const ghostScene = gltf.scene;
                 ghostScene.position.set(0, 0, 0);
                 ghostScene.rotation.set(0, 0, 0);
+                ghostScene.name = 'occluder-ghostgunes';
                 prepOccluder(ghostScene);        // make it "ghost"
                 smoothed.add(ghostScene);        // Add to smoothed group for consistent positioning
                 ghostScene.visible = true;
+                firstTargetOccluders.push(ghostScene);
                 console.log("[OCCLUDER] Ghost4 (gunes/sun layer) added to scene - visible:", ghostScene.visible);
-                
-                // Double check it's in the scene
                 console.log("[OCCLUDER] Ghost4 in smoothed group:", smoothed.children.includes(ghostScene));
+                console.log("[OCCLUDER] Total occluders loaded:", firstTargetOccluders.length);
             },
             (progress) => {
                 // Log loading progress
@@ -603,8 +1083,11 @@ document.addEventListener('DOMContentLoaded', () => {
             applyVisibility();
         }
         
-        // Second smoothed group (will be created when second anchor is initialized)
+        // Second smoothed group (for middle target - will be created when second anchor is initialized)
         let secondSmoothed = null;
+        
+        // Third smoothed group (for building target - will be created when third anchor is initialized)
+        let thirdSmoothed = null;
         
         // Register function for second target
         function secondRegister(obj, slot) {
@@ -614,6 +1097,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             secondModels[slot] = obj;
             secondApplyVisibility();
+        }
+        
+        // Register function for third target
+        function thirdRegister(obj, slot) {
+            obj.visible = false;
+            if (thirdSmoothed) {
+                thirdSmoothed.add(obj);       // attach to third smoothed group
+            }
+            thirdModels[slot] = obj;
+            thirdApplyVisibility();
         }
 
 
@@ -755,7 +1248,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 started: false, // Track if sequence has started
                 
                 onEnter() {
-                    console.log(`Composite slot ${slot} entered, targetFound: ${targetFound}, allLoaded: ${allLoaded}/${files.length}`);
+                    console.log(`[Target 1] Composite slot ${slot} entered, targetFound: ${targetFound}, allLoaded: ${allLoaded}/${files.length}`);
+                    // Ensure other targets' models are hidden
+                    secondModels.forEach(m => { if (m) m.visible = false; });
+                    thirdModels.forEach(m => { if (m) m.visible = false; });
+                    
                     if (resetOnEnter) {
                         clearTimers();
                         hideAllParts();
@@ -839,6 +1336,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // ============ LOAD COMPOSITE FOR SECOND TARGET ============
         // Similar to loadComposite but for second target scenes
         function secondLoadComposite(slot, files, timing, hideAfter, { resetOnLeave=true, exclusive=false, resetOnEnter=true } = {}) {
+            console.log(`[Target 2] Loading composite slot ${slot} with ${files.length} files`);
+            
             const group = new THREE.Group();
             group.name = `second-composite-slot-${slot}`;
             secondRegister(group, slot);
@@ -852,9 +1351,12 @@ document.addEventListener('DOMContentLoaded', () => {
             function hidePart(i) {
                 const p = parts[i];
                 if (!p) return;
-                console.log(`[Second Target] Hiding part ${i}`);
+                console.log(`[Second Target] Hiding part ${i} after ${hideAfter[i]}ms`);
                 p.visible = false;
                 stopAnimationsForPart(p);
+                
+                // Update navigation buttons after hiding part
+                secondUpdateNavigationButtons();
             }
 
             function revealPart(i) {
@@ -878,7 +1380,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         hidePart(i);
                     }, hideAfter[i]);
                     timers.push(hideTimer);
+                    console.log(`[Second Target] Scheduled part ${i} to hide after ${hideAfter[i]}ms`);
+                } else {
+                    // This is a permanent part (hideAfter = 0), check if navigation should be enabled
+                    console.log(`[Second Target] Part ${i} is permanent, checking navigation...`);
                 }
+                
+                // Update navigation buttons after revealing part
+                secondUpdateNavigationButtons();
             }
 
             function startAnimationsForPart(part) {
@@ -943,6 +1452,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 started: false,
                 
                 onEnter() {
+                    console.log(`[Target 2] Scene ${slot} onEnter - ${files.length} files, allLoaded: ${allLoaded}`);
+                    // Ensure first target models are hidden
+                    models.forEach(m => { if (m) m.visible = false; });
+                    
                     if (resetOnEnter) {
                         clearTimers();
                         hideAllParts();
@@ -968,10 +1481,27 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 },
                 areAllPartsVisible() {
-                    return parts.every((part, i) => {
-                        if (!part) return true;
-                        return part.visible;
+                    // For empty scenes, consider all parts visible
+                    if (files.length === 0) return true;
+                    
+                    // Check if all PERMANENT parts (hideAfter = 0) are visible
+                    // Temporary parts (hideAfter > 0) don't block navigation
+                    const result = parts.every((part, i) => {
+                        if (!part) return true; // If part doesn't exist, consider it "visible"
+                        // If this part has auto-hide (hideAfter > 0), don't check its visibility
+                        if (hideAfter && hideAfter[i] && hideAfter[i] > 0) {
+                            return true; // Temporary parts don't block navigation
+                        }
+                        const isVisible = part.visible;
+                        if (!isVisible) {
+                            console.log(`[Target 2] Slot ${slot}: Permanent part ${i} is not visible yet`);
+                        }
+                        return isVisible; // Permanent parts must be visible
                     });
+                    if (result) {
+                        console.log(`✅ [Target 2] Slot ${slot}: All permanent parts are visible! Navigation enabled.`);
+                    }
+                    return result;
                 }
             };
 
@@ -993,6 +1523,200 @@ document.addEventListener('DOMContentLoaded', () => {
                     console.log(`[Second Target] Part ${i} loaded. Total loaded: ${allLoaded}/${files.length}`);
                     if (secondModels[slot] === group && secondIndex === slot && secondTargetFound) {
                         secondSlotControllers[slot].startSequenceIfReady();
+                    }
+                });
+            });
+        }
+
+        // ============ LOAD COMPOSITE FOR THIRD TARGET ============
+        // Similar to loadComposite but for third target scenes (building)
+        function thirdLoadComposite(slot, files, timing, hideAfter, { resetOnLeave=true, exclusive=false, resetOnEnter=true } = {}) {
+            const group = new THREE.Group();
+            group.name = `third-composite-slot-${slot}`;
+            thirdRegister(group, slot);
+
+            const parts = [];
+            let timers = [];
+            let allLoaded = 0;
+
+            const clearTimers = () => { timers.forEach(id => clearTimeout(id)); timers = []; };
+
+            function hidePart(i) {
+                const p = parts[i];
+                if (!p) return;
+                console.log(`[Third Target] Hiding part ${i} after ${hideAfter[i]}ms`);
+                p.visible = false;
+                stopAnimationsForPart(p);
+                
+                // Update navigation buttons after hiding part
+                thirdUpdateNavigationButtons();
+            }
+
+            function revealPart(i) {
+                if (exclusive) {
+                    parts.forEach((p, j) => {
+                        if (p) {
+                            p.visible = (j === i);
+                            if (j !== i) stopAnimationsForPart(p);
+                        }
+                    });
+                }
+
+                const p = parts[i];
+                if (!p) return;
+                console.log(`[Third Target] Revealing part ${i}`);
+                p.visible = true;
+                startAnimationsForPart(p);
+
+                if (hideAfter && hideAfter[i] && hideAfter[i] > 0) {
+                    const hideTimer = setTimeout(() => {
+                        hidePart(i);
+                    }, hideAfter[i]);
+                    timers.push(hideTimer);
+                    console.log(`[Third Target] Scheduled part ${i} to hide after ${hideAfter[i]}ms`);
+                } else {
+                    // This is a permanent part (hideAfter = 0), check if navigation should be enabled
+                    console.log(`[Third Target] Part ${i} is permanent, checking navigation...`);
+                }
+                
+                // Update navigation buttons after revealing part
+                thirdUpdateNavigationButtons();
+            }
+
+            function startAnimationsForPart(part) {
+                const target = part;
+                const clips = (target.userData && Array.isArray(target.userData.clips)) ? target.userData.clips : [];
+                if (!clips.length) return;
+
+                const mixer = new THREE.AnimationMixer(target);
+                target.userData.mixers = target.userData.mixers || [];
+                target.userData.mixers.push(mixer);
+
+                clips.forEach((clip) => {
+                    const action = mixer.clipAction(clip);
+                    action.reset();
+                    action.setLoop(THREE.LoopOnce);
+                    action.clampWhenFinished = true;
+                    action.time = 0;
+                    action.enabled = true;
+                    action.setEffectiveWeight(1.0);
+                    action.fadeIn(0);
+                    action.play();
+                });
+            }
+
+            function stopAnimationsForPart(part) {
+                part.traverse((child) => {
+                    if (child.userData.mixers) {
+                        child.userData.mixers.forEach(mixer => mixer.stopAllAction());
+                        child.userData.mixers = [];
+                    }
+                });
+            }
+
+            function startSequence() {
+                if (thirdSlotControllers[slot].started) return;
+                if (allLoaded < files.length) return;
+                
+                thirdSlotControllers[slot].started = true;
+                clearTimers();
+                
+                let cumulativeTime = 0;
+                files.forEach((_, i) => {
+                    cumulativeTime += timing[i] || 0;
+                    const id = setTimeout(() => {
+                        revealPart(i);
+                    }, cumulativeTime);
+                    timers.push(id);
+                });
+            }
+
+            function hideAllParts() {
+                parts.forEach(p => {
+                    if (p) {
+                        p.visible = false;
+                        stopAnimationsForPart(p);
+                    }
+                });
+            }
+
+            thirdSlotControllers[slot] = {
+                isComposite: true,
+                started: false,
+                
+                onEnter() {
+                    console.log(`[Target 3] Scene ${slot} onEnter - ${files.length} files, allLoaded: ${allLoaded}`);
+                    // Ensure other targets' models are hidden
+                    models.forEach(m => { if (m) m.visible = false; });
+                    secondModels.forEach(m => { if (m) m.visible = false; });
+                    
+                    if (resetOnEnter) {
+                        clearTimers();
+                        hideAllParts();
+                        this.started = false;
+                    }
+                    
+                    if (thirdTargetFound && allLoaded >= files.length) {
+                        startSequence();
+                        this.started = true;
+                    }
+                },
+                onLeave() {
+                    clearTimers();
+                    if (resetOnLeave) { hideAllParts(); }
+                    this.started = false;
+                },
+                startSequenceIfReady() {
+                    if (thirdTargetFound && !this.started) {
+                        if (allLoaded >= files.length) {
+                            startSequence();
+                            this.started = true;
+                        }
+                    }
+                },
+                areAllPartsVisible() {
+                    // For empty scenes, consider all parts visible
+                    if (files.length === 0) return true;
+                    
+                    // Check if all PERMANENT parts (hideAfter = 0) are visible
+                    // Temporary parts (hideAfter > 0) don't block navigation
+                    const result = parts.every((part, i) => {
+                        if (!part) return true; // If part doesn't exist, consider it "visible"
+                        // If this part has auto-hide (hideAfter > 0), don't check its visibility
+                        if (hideAfter && hideAfter[i] && hideAfter[i] > 0) {
+                            return true; // Temporary parts don't block navigation
+                        }
+                        const isVisible = part.visible;
+                        if (!isVisible) {
+                            console.log(`[Target 3] Slot ${slot}: Permanent part ${i} is not visible yet`);
+                        }
+                        return isVisible; // Permanent parts must be visible
+                    });
+                    if (result) {
+                        console.log(`✅ [Target 3] Slot ${slot}: All permanent parts are visible! Navigation enabled.`);
+                    }
+                    return result;
+                }
+            };
+
+            files.forEach((path, i) => {
+                console.log(`[Third Target] Loading composite part ${i}: ${path}`);
+                loader.load(path, (gltf) => {
+                    console.log(`[Third Target] Loaded part ${i}: ${path}`);
+                    const root = gltf.scene;
+                    root.visible = false;
+                    root.position.set(0,0,0);
+                    root.rotation.set(0,0,0);
+                    root.userData = root.userData || {};
+                    root.userData.clips = Array.isArray(gltf.animations) ? gltf.animations : [];
+                    prepContent(root);
+                    group.add(root);
+                    parts[i] = root;
+
+                    allLoaded++;
+                    console.log(`[Third Target] Part ${i} loaded. Total loaded: ${allLoaded}/${files.length}`);
+                    if (thirdModels[slot] === group && thirdIndex === slot && thirdTargetFound) {
+                        thirdSlotControllers[slot].startSequenceIfReady();
                     }
                 });
             });
@@ -1252,6 +1976,7 @@ document.addEventListener('DOMContentLoaded', () => {
             "./applications-20230306/applications/assets/DataModel11_3/Sahne3.4/BarV2-6.gltf",   
             "./applications-20230306/applications/assets/DataModel11_3/Sahne3.4/BarV2-7.gltf",
             "./applications-20230306/applications/assets/DataModel11_3/Sahne3.4/BarV2-8.gltf",
+            "./applications-20230306/applications/assets/DataModel11_3/Sahne3.4/BarV2-9.gltf",
 
             "./applications-20230306/applications/assets/DataModel11_3/Sahne3.4/Simsek3.gltf",
 
@@ -1264,7 +1989,7 @@ document.addEventListener('DOMContentLoaded', () => {
             4000, 5000, 6167, 7834, 9001, 
             10000,
             10000, 10500, 11000, 11500, 12000, 12500, 13000, 13500, 14000, 14500,
-            15000, 15500, 18500,
+            15000, 15500, 15500, 19666,
             15500,
 
             ],
@@ -1277,7 +2002,7 @@ document.addEventListener('DOMContentLoaded', () => {
             0, 0, 0, 0, 0,
             5500,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0,
+            0, 0, 0, 0,
             0,
 
             ], {
@@ -1288,45 +2013,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
 
-        // ============ SCENE 4: GUIDE TO SECOND TARGET ============
-        // Load 4th scene with line drawing guide (appears after viewing first 3 scenes)
-        function loadGuideScene() {
-            const group = new THREE.Group();
-            group.name = 'guide-scene';
-            
-            // Create a plane for the line drawing image
-            const textureLoader = new THREE.TextureLoader();
-            textureLoader.load(
-                './applications-20230306/applications/assets/DataModel11_3/Sahne4/binacizgi.png',
-                (texture) => {
-                    // Create plane geometry with appropriate aspect ratio
-                    const aspectRatio = texture.image.width / texture.image.height;
-                    const planeWidth = 0.3;
-                    const planeHeight = planeWidth / aspectRatio;
-                    
-                    const geometry = new THREE.PlaneGeometry(planeWidth, planeHeight);
-                    const material = new THREE.MeshBasicMaterial({
-                        map: texture,
-                        transparent: true,
-                        side: THREE.DoubleSide
-                    });
-                    
-                    const linePlane = new THREE.Mesh(geometry, material);
-                    linePlane.position.set(0, 0.05, 0); // Slightly above the target
-                    group.add(linePlane);
-                    
-                    // Add instruction text using CSS3DRenderer or create 3D text
-                    // For now, we'll create a simple text sprite
-                    createTextSprite('Turn to your right\nuntil you match the line', group);
-                    
-                    register(group, 3); // Register as scene 4 (index 3)
-                },
-                undefined,
-                (err) => console.error('Error loading guide image:', err)
-            );
-        }
-        
-        // Create text sprite for AR instructions
+        // Create text sprite for AR instructions (shared by second target guide)
         function createTextSprite(text, parentGroup) {
             const canvas = document.createElement('canvas');
             const context = canvas.getContext('2d');
@@ -1362,15 +2049,16 @@ document.addEventListener('DOMContentLoaded', () => {
             parentGroup.add(sprite);
         }
         
-        // Load the guide scene (4th scene on first target)
-        loadGuideScene();
-        
-        // NOTE: Second target scenes are loaded lazily when scene 4 is reached
-        // This optimizes performance by not tracking the second target until needed
+        // NOTE: Second target (middle) is initialized when user completes first target
+        // Third target (building) is initialized when reaching second target scene 3 (guide)
+        // This optimizes performance by not tracking targets until needed
 
         // ============ START ============
         // ============ START AR ============
         await mindarThree.start();
+        
+        // NOTE: Second anchor initializes when user clicks next after completing first target
+        // Third anchor initializes when reaching second target scene 3 (guide scene)
         
         // Animation mixer for updating animations
         const clock = new THREE.Clock();
@@ -1389,6 +2077,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const secondAnchorWorldQuaternion = new THREE.Quaternion();
         const secondAnchorWorldScale = new THREE.Vector3();
         
+        const thirdAnchorWorldPosition = new THREE.Vector3();
+        const thirdAnchorWorldQuaternion = new THREE.Quaternion();
+        const thirdAnchorWorldScale = new THREE.Vector3();
+        
         renderer.setAnimationLoop(() => {
             const delta = Math.min(clock.getDelta(), 0.1); // Cap delta to prevent large jumps
             
@@ -1405,7 +2097,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 smoothed.scale.lerp(anchorWorldScale, smoothingAlpha);
             }
             
-            // Apply constant smoothing to second target
+            // Apply constant smoothing to second target (middle target)
             if (secondTargetFound && secondSmoothed && secondAnchor) {
                 // Extract world transform from second anchor
                 secondAnchor.group.getWorldPosition(secondAnchorWorldPosition);
@@ -1416,6 +2108,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 secondSmoothed.position.lerp(secondAnchorWorldPosition, smoothingAlpha);
                 secondSmoothed.quaternion.slerp(secondAnchorWorldQuaternion, smoothingAlpha);
                 secondSmoothed.scale.lerp(secondAnchorWorldScale, smoothingAlpha);
+            }
+            
+            // Apply constant smoothing to third target (building target)
+            if (thirdTargetFound && thirdSmoothed && thirdAnchor) {
+                // Extract world transform from third anchor
+                thirdAnchor.group.getWorldPosition(thirdAnchorWorldPosition);
+                thirdAnchor.group.getWorldQuaternion(thirdAnchorWorldQuaternion);
+                thirdAnchor.group.getWorldScale(thirdAnchorWorldScale);
+                
+                // Smoothly interpolate third smoothed group to match third anchor's world transform
+                thirdSmoothed.position.lerp(thirdAnchorWorldPosition, smoothingAlpha);
+                thirdSmoothed.quaternion.slerp(thirdAnchorWorldQuaternion, smoothingAlpha);
+                thirdSmoothed.scale.lerp(thirdAnchorWorldScale, smoothingAlpha);
             }
             
             // Update all animation mixers for first target
@@ -1433,6 +2138,19 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Update all animation mixers for second target
             secondModels.forEach(model => {
+                if (model && model.visible) { // Only update visible models
+                    model.traverse((child) => {
+                        if (child.userData.mixers) {
+                            child.userData.mixers.forEach(mixer => {
+                                mixer.update(delta);
+                            });
+                        }
+                    });
+                }
+            });
+            
+            // Update all animation mixers for third target
+            thirdModels.forEach(model => {
                 if (model && model.visible) { // Only update visible models
                     model.traverse((child) => {
                         if (child.userData.mixers) {
